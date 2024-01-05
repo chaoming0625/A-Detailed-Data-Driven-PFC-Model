@@ -1,1 +1,1 @@
-brainpy>=2.4.3
+brainpy>=2.4.6.post5

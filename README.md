@@ -19,7 +19,7 @@ Before run the model, please install [brainpy](https://github.com/brainpy/BrainP
 
 This model needs:
 
-> brainpy>= 2.4.3
+> brainpy>= 2.4.6.post5
 
 
 

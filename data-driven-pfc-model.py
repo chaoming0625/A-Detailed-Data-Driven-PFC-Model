@@ -37,7 +37,9 @@ class AdExIF(bp.dyn.NeuDyn):
 
     # integral
     self.integral = bp.odeint(bp.JointEq(self.dV, self.dw), method=method)
-    self.reset_state()
+
+    # reset state
+    self.reset_state(self.mode)
 
   def reset_state(self, *args, **kwargs):
     self.V = bp.init.variable_(self.V_initializer, self.varshape)
@@ -46,9 +48,12 @@ class AdExIF(bp.dyn.NeuDyn):
     self.t_last_spike = bm.Variable(bm.ones(self.varshape) * -1e8)
 
   def dV(self, V, t, w, Iext=None):
-    I = 0. if Iext is None else Iext
+    I = 0.
+    if Iext is not None:
+      I = I + Iext
     if self.Ib is not None:
       I = I + self.Ib
+    I = self.sum_current_inputs(V, init=I)
     dVdt = (self.g_L * self.delta_T * bm.exp((V - self.V_up) / self.delta_T)
             - w + self.g_L * (self.E_L - V) + I) / self.C
     return dVdt
@@ -90,9 +95,10 @@ class STPLinear(bp.DynamicalSystem):
     spk = spike
     if spike.ndim == 1:
       spk = bm.expand_dims(spk, 1)
-    stp = self.stp(spk)
+    stp = self.stp(spk) * spk
     x = bm.ones(spike.shape)
-    return x @ self.dropout(stp * self.g_max * self.mask, fit=True)
+    return x @ (stp * self.g_max * self.mask)
+    # return x @ self.dropout(stp * self.g_max * self.mask, fit=True)
 
 
 class MgBlock(bp.dyn.SynOut):
@@ -154,7 +160,7 @@ class AdExNet(bp.DynamicalSystem):
 
     print('Initializing synaptic projections ...')
     # AMPA
-    self.ampa = bp.dyn.ProjAlignPost1(
+    self.ampa = bp.dyn.HalfProjAlignPost(
       comm=STPLinear(bm.asarray(res['ampa_g_max']),
                      bm.asarray(res['exe_conn']),
                      bm.asarray(res['ampa_U']),
@@ -166,7 +172,7 @@ class AdExNet(bp.DynamicalSystem):
     )
 
     # GABA
-    self.gaba = bp.dyn.ProjAlignPost1(
+    self.gaba = bp.dyn.HalfProjAlignPost(
       comm=STPLinear(bm.asarray(res['gaba_g_max']),
                      bm.asarray(res['inh_conn']),
                      bm.asarray(res['gaba_U']),
@@ -178,7 +184,7 @@ class AdExNet(bp.DynamicalSystem):
     )
 
     # NMDA
-    self.nmda = bp.dyn.ProjAlignPost1(
+    self.nmda = bp.dyn.HalfProjAlignPost(
       comm=STPLinear(bm.asarray(res['nmda_g_max']),
                      bm.asarray(res['exe_conn']),
                      bm.asarray(res['nmda_U']),
